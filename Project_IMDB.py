@@ -7,10 +7,16 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
+from scipy import stats
 
+# Download required NLTK data once
+nltk.download('punkt', quiet=True)
+nltk.download('stopwords', quiet=True)
+nltk.download('wordnet', quiet=True)
+nltk.download('punkt_tab', quiet=True)
 
 REQUIRED_COLUMNS = [
-    'Series_Title', 'Genre', 'IMDB_Rating', 'Runtime', 'Gross', 'Released_Year'
+    'Series_Title', 'Genre', 'IMDB_Rating', 'Runtime', 'Gross', 'Released_Year', 'Overview', 'Meta_score'
 ]
 
 
@@ -162,36 +168,21 @@ def genre_analysis(csv_file: str, top_n: int = 10, save_fig: bool = True) -> Non
         print("Visualization saved as 'genre_popularity_decades.png'")
     plt.show()
 
-    print("\nAnalysis Complete!")
 
+# Overview Text Preprocessing
+# ===========================================
 
-if __name__ == '__main__':
-    csv_path = 'imdb_top_1000.csv'
-    df = exploratory_data_analysis(csv_path, plot=True)
-    genre_analysis(csv_path)
-
-
- # Overview Text Preprocessing
- # ===========================================   
-
-# Download required NLTK data
-nltk.download('punkt', quiet=True)
-nltk.download('stopwords', quiet=True)
-nltk.download('wordnet', quiet=True)
-nltk.download('punkt_tab', quiet=True)
-
-def overview_text_preprocessing(csv_file):
+def overview_text_preprocessing(df: pd.DataFrame) -> pd.DataFrame:
     """
     Preprocesses Overview text and analyzes correlation with ratings.
+    Accepts preprocessed DataFrame from load_and_preprocess().
     """
-    
-    df = pd.read_csv(csv_file)
+    df = df.copy()
     
     print("OVERVIEW TEXT PREPROCESSING")
     print("=" * 60)
     
-    # ========================================================================
-    # 1. CLEAN AND PREPROCESS OVERVIEW
+    # CLEAN AND PREPROCESS OVERVIEW
     # ========================================================================
     print("\n1. TEXT PREPROCESSING")
     print("-" * 60)
@@ -211,14 +202,9 @@ def overview_text_preprocessing(csv_file):
                    if word.isalpha() and word not in stop_words]
         return ' '.join(cleaned)
     
-    df['Overview_Cleaned'] = df['Overview'].apply(preprocess_text)
+    df['Overview_Cleaned'] = df['Overview'].apply(preprocess_text) 
     
-    print("Example (first movie):")
-    print(f"Original: {df['Overview'].iloc[0][:100]}...")
-    print(f"Cleaned:  {df['Overview_Cleaned'].iloc[0][:100]}...")
-    
-    # ========================================================================
-    # 2. COMPUTE LENGTH AND CORRELATION
+    # COMPUTE LENGTH AND CORRELATION
     # ========================================================================
     print("\n\n2. OVERVIEW LENGTH AND CORRELATION ANALYSIS")
     print("-" * 60)
@@ -231,36 +217,49 @@ def overview_text_preprocessing(csv_file):
     print(f"  Words: {df['Length_Words'].mean():.2f}")
     print(f"  Characters: {df['Length_Chars'].mean():.2f}")
     
-    # Correlation analysis
-    corr_rating_words = df['Length_Words'].corr(df['IMDB_Rating'])
-    corr_meta_words = df['Length_Words'].corr(df['Meta_score'])
+    # Filter out zero-length overviews for correlation
+    df_valid = df[df['Length_Words'] > 0].copy()
+    print(f"\nValid overviews for correlation: {len(df_valid)}/{len(df)}")
     
-    print("\nCorrelation with Ratings:")
-    print(f"  Overview Length vs IMDB Rating: {corr_rating_words:.4f}")
-    print(f"  Overview Length vs Meta Score: {corr_meta_words:.4f}")
+    # Correlation analysis with p-values
+    corr_rating, p_rating = stats.pearsonr(df_valid['Length_Words'], df_valid['IMDB_Rating'])
+    
+    df_meta_valid = df_valid.dropna(subset=['Meta_score'])
+    if len(df_meta_valid) > 0:
+        corr_meta, p_meta = stats.pearsonr(df_meta_valid['Length_Words'], df_meta_valid['Meta_score'])
+    else:
+        corr_meta, p_meta = np.nan, np.nan
+    
+    print("\nCorrelation with Ratings (Pearson):")
+    print(f"  Overview Length vs IMDB Rating: {corr_rating:.4f} (p={p_rating:.4f})")
+    print(f"  Overview Length vs Meta Score: {corr_meta:.4f} (p={p_meta:.4f})")
+    print(f"  Meta Score data available: {len(df_meta_valid)}/{len(df)} rows")
     
     # Visualization
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     
-    # Plot 1: Length vs IMDB Rating
-    ax1.scatter(df['Length_Words'], df['IMDB_Rating'], alpha=0.5)
-    z = np.polyfit(df['Length_Words'], df['IMDB_Rating'], 1)
+    # Plot 1: Length vs IMDB Rating (using filtered data)
+    ax1.scatter(df_valid['Length_Words'], df_valid['IMDB_Rating'], alpha=0.5)
+    z = np.polyfit(df_valid['Length_Words'], df_valid['IMDB_Rating'], 1)
     p = np.poly1d(z)
-    ax1.plot(df['Length_Words'], p(df['Length_Words']), "r--", alpha=0.8)
+    ax1.plot(df_valid['Length_Words'], p(df_valid['Length_Words']), "r--", alpha=0.8)
     ax1.set_xlabel('Overview Length (words)')
     ax1.set_ylabel('IMDB Rating')
-    ax1.set_title(f'Length vs IMDB Rating (corr: {corr_rating_words:.3f})')
+    ax1.set_title(f'Length vs IMDB Rating (r={corr_rating:.3f}, p={p_rating:.3f})')
     ax1.grid(True, alpha=0.3)
     
     # Plot 2: Length vs Meta Score
-    df_meta = df.dropna(subset=['Meta_score'])
-    ax2.scatter(df_meta['Length_Words'], df_meta['Meta_score'], alpha=0.5, color='orange')
-    z2 = np.polyfit(df_meta['Length_Words'], df_meta['Meta_score'], 1)
-    p2 = np.poly1d(z2)
-    ax2.plot(df_meta['Length_Words'], p2(df_meta['Length_Words']), "r--", alpha=0.8)
+    if len(df_meta_valid) > 0:
+        ax2.scatter(df_meta_valid['Length_Words'], df_meta_valid['Meta_score'], alpha=0.5, color='orange')
+        z2 = np.polyfit(df_meta_valid['Length_Words'], df_meta_valid['Meta_score'], 1)
+        p2 = np.poly1d(z2)
+        ax2.plot(df_meta_valid['Length_Words'], p2(df_meta_valid['Length_Words']), "r--", alpha=0.8)
+        ax2.set_title(f'Length vs Meta Score (r={corr_meta:.3f}, p={p_meta:.3f})')
+    else:
+        ax2.text(0.5, 0.5, 'Insufficient Meta Score data', ha='center', va='center', transform=ax2.transAxes)
+        ax2.set_title('Length vs Meta Score (No data)')
     ax2.set_xlabel('Overview Length (words)')
     ax2.set_ylabel('Meta Score')
-    ax2.set_title(f'Length vs Meta Score (corr: {corr_meta_words:.3f})')
     ax2.grid(True, alpha=0.3)
     
     plt.tight_layout()
@@ -272,6 +271,10 @@ def overview_text_preprocessing(csv_file):
     return df
 
 
-# Run the function
-if __name__ == "__main__":
-    df_processed = overview_text_preprocessing('imdb_top_1000.csv')
+if __name__ == '__main__':
+    csv_path = 'imdb_top_1000.csv'
+    df = exploratory_data_analysis(csv_path, plot=True)
+    genre_analysis(csv_path)
+    df_processed = overview_text_preprocessing(df)
+
+    
