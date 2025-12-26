@@ -267,7 +267,6 @@ def overview_text_preprocessing(df: pd.DataFrame) -> pd.DataFrame:
     print("\nVisualization saved as 'overview_correlation.png'")
     plt.show()
     
-    print("\nPreprocessing Complete!")
     return df
 
 
