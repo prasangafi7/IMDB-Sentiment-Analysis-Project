@@ -9,6 +9,9 @@ from nltk.stem import WordNetLemmatizer
 from scipy import stats
 from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.sentiment import SentimentIntensityAnalyzer
+from transformers import pipeline
+import warnings
+warnings.filterwarnings('ignore')
 
 
 # Download required NLTK data once
@@ -503,6 +506,128 @@ def sentiment_analysis_vader(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def sentiment_analysis_bert(csv_file):
+    """
+    Measures sentiment polarity using BERT and explores correlation with ratings and gross.
+    """
+    
+    # Load dataset
+    df = pd.read_csv(csv_file)
+    df = df.dropna(subset=['Overview'])
+    
+    print("\n\nSENTIMENT ANALYSIS - BERT")
+    print("=" * 60)
+    
+    # MEASURE SENTIMENT POLARITY WITH BERT
+    # ========================================================================
+    print("\nMEASURING SENTIMENT POLARITY")
+    print("-" * 60)
+    print("Loading BERT model (this may take a moment)...")
+    
+    # Initialize BERT sentiment pipeline
+    bert_sentiment = pipeline('sentiment-analysis', 
+                             model='distilbert-base-uncased-finetuned-sst-2-english')
+    
+    print(f"Analyzing {len(df)} movie overviews with BERT...")
+    print("(This will take 5-10 minutes)\n")
+    
+    # Calculate sentiment for each overview
+    bert_scores = []
+    bert_labels = []
+    
+    for i, overview in enumerate(df['Overview']):
+        if (i + 1) % 100 == 0:
+            print(f"Progress: {i + 1}/{len(df)} movies processed...")
+        
+        try:
+            # Truncate to 512 characters (BERT limit)
+            truncated = overview[:512]
+            result = bert_sentiment(truncated)[0]
+            
+            # Convert to -1 to +1 scale
+            score = result['score'] if result['label'] == 'POSITIVE' else -result['score']
+            bert_scores.append(score)
+            bert_labels.append(result['label'])
+        except:
+            bert_scores.append(0.0)
+            bert_labels.append('NEUTRAL')
+    
+    df['Sentiment'] = bert_scores
+    df['Sentiment_Label'] = bert_labels
+    
+    print(f"\nSentiment Score Statistics:")
+    print(f"  Mean: {df['Sentiment'].mean():.4f}")
+    print(f"  Median: {df['Sentiment'].median():.4f}")
+    print(f"  Min: {df['Sentiment'].min():.4f}")
+    print(f"  Max: {df['Sentiment'].max():.4f}")
+    
+    print(f"\nSentiment Distribution:")
+    print(df['Sentiment_Label'].value_counts())
+    
+    # ========================================================================
+    # CORRELATION WITH IMDB RATING AND GROSS
+    # ========================================================================
+    print("\n\n2. CORRELATION ANALYSIS")
+    print("-" * 60)
+    
+    # Clean gross data
+    df['Gross_Clean'] = df['Gross'].str.replace(',', '').astype(float)
+    
+    # Calculate correlations
+    corr_imdb = df['Sentiment'].corr(df['IMDB_Rating'])
+    corr_gross = df['Sentiment'].corr(df['Gross_Clean'])
+    
+    print(f"\nCorrelation Results:")
+    print(f"  Sentiment vs IMDB Rating: {corr_imdb:.4f}")
+    print(f"  Sentiment vs Box Office Gross: {corr_gross:.4f}")
+    
+    # ========================================================================
+    # VISUALIZATIONS
+    # ========================================================================
+    print("\n\n3. CREATING VISUALIZATIONS")
+    print("-" * 60)
+    
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    fig.suptitle('Sentiment Analysis with BERT', fontsize=16, fontweight='bold')
+    
+    # Plot 1: Sentiment Distribution
+    axes[0].hist(df['Sentiment'], bins=30, color='coral', edgecolor='black')
+    axes[0].axvline(df['Sentiment'].mean(), color='red', 
+                    linestyle='--', label=f"Mean: {df['Sentiment'].mean():.2f}")
+    axes[0].set_xlabel('Sentiment Score')
+    axes[0].set_ylabel('Number of Movies')
+    axes[0].set_title('BERT Sentiment Distribution')
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+    
+    # Plot 2: Sentiment vs IMDB Rating
+    axes[1].scatter(df['Sentiment'], df['IMDB_Rating'], alpha=0.5, color='orange')
+    z = np.polyfit(df['Sentiment'], df['IMDB_Rating'], 1)
+    p = np.poly1d(z)
+    axes[1].plot(df['Sentiment'], p(df['Sentiment']), "r--", alpha=0.8)
+    axes[1].set_xlabel('Sentiment Score')
+    axes[1].set_ylabel('IMDB Rating')
+    axes[1].set_title(f'Sentiment vs IMDB Rating (r = {corr_imdb:.3f})')
+    axes[1].grid(True, alpha=0.3)
+    
+    # Plot 3: Sentiment vs Gross
+    df_gross = df.dropna(subset=['Gross_Clean'])
+    axes[2].scatter(df_gross['Sentiment'], df_gross['Gross_Clean']/1e6, 
+                   alpha=0.5, color='brown')
+    axes[2].set_xlabel('Sentiment Score')
+    axes[2].set_ylabel('Box Office Gross (Millions $)')
+    axes[2].set_title(f'Sentiment vs Gross (r = {corr_gross:.3f})')
+    axes[2].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig('bert_sentiment_correlation.png', dpi=300, bbox_inches='tight')
+    print("\nVisualization saved as 'bert_sentiment_correlation.png'")
+    plt.show()
+    
+    print("\nAnalysis Complete!")
+    return df
+    
+
 if __name__ == '__main__':
     csv_path = 'imdb_top_1000.csv'
     
@@ -512,6 +637,7 @@ if __name__ == '__main__':
     df_processed = overview_text_preprocessing(df)
     keyword_extraction_tfidf(df_processed)
     df_with_sentiment = sentiment_analysis_vader(df_processed)
+    df_with_sentiment = sentiment_analysis_bert('imdb_top_1000.csv')
 
 
 
