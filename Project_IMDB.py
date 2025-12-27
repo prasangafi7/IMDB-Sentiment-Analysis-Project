@@ -8,6 +8,8 @@ from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 from scipy import stats
 from sklearn.feature_extraction.text import TfidfVectorizer
+from nltk.sentiment import SentimentIntensityAnalyzer
+
 
 # Download required NLTK data once
 nltk.download('punkt', quiet=True)
@@ -386,13 +388,131 @@ def keyword_extraction_tfidf(df: pd.DataFrame) -> None:
     
     print("\nAnalysis Complete!")
 
-# Run the function
+# SENTIMENT ANALYSIS USING VADER
+# ===========================================
+
+# Download VADER lexicon
+nltk.download('vader_lexicon', quiet=True)
+
+def sentiment_analysis_vader(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Measures sentiment polarity using VADER and explores correlation with ratings and gross.
+    Accepts preprocessed DataFrame from load_and_preprocess().
+    """
+    df = df.dropna(subset=['Overview']).copy()
+    
+    print("\n\nSENTIMENT ANALYSIS - VADER")
+    print("=" * 60)
+    
+    # MEASURE SENTIMENT POLARITY
+    # ========================================================================
+    print("\nMEASURING SENTIMENT POLARITY")
+    print("-" * 60)
+    
+    # Initialize VADER
+    sia = SentimentIntensityAnalyzer()
+    
+    # Calculate sentiment for each overview
+    print("Analyzing sentiment...")
+    vader_scores = []
+    for overview in df['Overview']:
+        scores = sia.polarity_scores(overview)
+        vader_scores.append(scores['compound'])
+    
+    df['Sentiment'] = vader_scores
+    
+    print(f"\nSentiment Score Statistics:")
+    print(f"  Mean: {df['Sentiment'].mean():.4f}")
+    print(f"  Median: {df['Sentiment'].median():.4f}")
+    print(f"  Min: {df['Sentiment'].min():.4f}")
+    print(f"  Max: {df['Sentiment'].max():.4f}")
+    
+    # Classify sentiments
+    df['Sentiment_Label'] = df['Sentiment'].apply(
+        lambda x: 'Positive' if x > 0.05 else ('Negative' if x < -0.05 else 'Neutral')
+    )
+    
+    print(f"\nSentiment Distribution:")
+    print(df['Sentiment_Label'].value_counts())
+    
+    # CORRELATION WITH IMDB RATING AND GROSS
+    # ========================================================================
+    print("\n\nCORRELATION ANALYSIS")
+    print("-" * 60)
+    
+    # Clean gross data
+    df['Gross_Clean'] = df['Gross'].str.replace(',', '').astype(float)
+    
+    # Calculate correlations with p-values
+    corr_imdb, p_imdb = stats.pearsonr(df['Sentiment'], df['IMDB_Rating'])
+    
+    df_gross_valid = df.dropna(subset=['Gross_Clean'])
+    if len(df_gross_valid) > 1:
+        corr_gross, p_gross = stats.pearsonr(df_gross_valid['Sentiment'], df_gross_valid['Gross_Clean'])
+    else:
+        corr_gross, p_gross = np.nan, np.nan
+    
+    print(f"\nCorrelation Results:")
+    print(f"  Sentiment vs IMDB Rating: {corr_imdb:.4f} (p={p_imdb:.4f})")
+    print(f"  Sentiment vs Box Office Gross: {corr_gross:.4f} (p={p_gross:.4f})")
+    print(f"  Gross data available: {len(df_gross_valid)}/{len(df)} rows")
+    
+    
+    # VISUALIZATIONS
+    # ========================================================================
+    print("\n\nCREATING VISUALIZATIONS")
+    print("-" * 60)
+    
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    fig.suptitle('Sentiment Analysis with VADER', fontsize=16, fontweight='bold')
+    
+    # Plot Sentiment Distribution
+    axes[0].hist(df['Sentiment'], bins=30, color='skyblue', edgecolor='black')
+    axes[0].axvline(df['Sentiment'].mean(), color='red', 
+                    linestyle='--', label=f"Mean: {df['Sentiment'].mean():.2f}")
+    axes[0].set_xlabel('Sentiment Score')
+    axes[0].set_ylabel('Number of Movies')
+    axes[0].set_title('Sentiment Distribution')
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+    
+    # Plot Sentiment vs IMDB Rating
+    axes[1].scatter(df['Sentiment'], df['IMDB_Rating'], alpha=0.5, color='green')
+    z = np.polyfit(df['Sentiment'], df['IMDB_Rating'], 1)
+    p = np.poly1d(z)
+    axes[1].plot(df['Sentiment'], p(df['Sentiment']), "r--", alpha=0.8)
+    axes[1].set_xlabel('Sentiment Score')
+    axes[1].set_ylabel('IMDB Rating')
+    axes[1].set_title(f'Sentiment vs IMDB Rating (r = {corr_imdb:.3f})')
+    axes[1].grid(True, alpha=0.3)
+    
+    # Plot 3: Sentiment vs Gross
+    df_gross = df.dropna(subset=['Gross_Clean'])
+    axes[2].scatter(df_gross['Sentiment'], df_gross['Gross_Clean']/1e6, alpha=0.5, color='purple')
+    axes[2].set_xlabel('Sentiment Score')
+    axes[2].set_ylabel('Box Office Gross (Millions $)')
+    axes[2].set_title(f'Sentiment vs Gross (r = {corr_gross:.3f})')
+    axes[2].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig('sentiment_correlation.png', dpi=300, bbox_inches='tight')
+    print("\nVisualization saved as 'sentiment_correlation.png'")
+    plt.show()
+    
+    print("\nAnalysis Complete!")
+    return df
+
 
 if __name__ == '__main__':
     csv_path = 'imdb_top_1000.csv'
+    
+    # Run all analyses in sequence
     df = exploratory_data_analysis(csv_path, plot=True)
     genre_analysis(csv_path)
     df_processed = overview_text_preprocessing(df)
     keyword_extraction_tfidf(df_processed)
+    df_with_sentiment = sentiment_analysis_vader(df_processed)
 
-    
+
+
+
