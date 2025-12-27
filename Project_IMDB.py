@@ -1,13 +1,13 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from collections import Counter
 from typing import Optional
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
 from scipy import stats
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 # Download required NLTK data once
 nltk.download('punkt', quiet=True)
@@ -179,12 +179,12 @@ def overview_text_preprocessing(df: pd.DataFrame) -> pd.DataFrame:
     """
     df = df.copy()
     
-    print("OVERVIEW TEXT PREPROCESSING")
+    print("\n\nOVERVIEW TEXT PREPROCESSING")
     print("=" * 60)
     
     # CLEAN AND PREPROCESS OVERVIEW
     # ========================================================================
-    print("\n1. TEXT PREPROCESSING")
+    print("\nTEXT PREPROCESSING")
     print("-" * 60)
     
     lemmatizer = WordNetLemmatizer()
@@ -206,7 +206,7 @@ def overview_text_preprocessing(df: pd.DataFrame) -> pd.DataFrame:
     
     # COMPUTE LENGTH AND CORRELATION
     # ========================================================================
-    print("\n\n2. OVERVIEW LENGTH AND CORRELATION ANALYSIS")
+    print("\n\nOVERVIEW LENGTH AND CORRELATION ANALYSIS")
     print("-" * 60)
     
     # Calculate lengths
@@ -238,7 +238,7 @@ def overview_text_preprocessing(df: pd.DataFrame) -> pd.DataFrame:
     # Visualization
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     
-    # Plot 1: Length vs IMDB Rating (using filtered data)
+    # Plot Length vs IMDB Rating (using filtered data)
     ax1.scatter(df_valid['Length_Words'], df_valid['IMDB_Rating'], alpha=0.5)
     z = np.polyfit(df_valid['Length_Words'], df_valid['IMDB_Rating'], 1)
     p = np.poly1d(z)
@@ -248,7 +248,7 @@ def overview_text_preprocessing(df: pd.DataFrame) -> pd.DataFrame:
     ax1.set_title(f'Length vs IMDB Rating (r={corr_rating:.3f}, p={p_rating:.3f})')
     ax1.grid(True, alpha=0.3)
     
-    # Plot 2: Length vs Meta Score
+    # Plot Length vs Meta Score
     if len(df_meta_valid) > 0:
         ax2.scatter(df_meta_valid['Length_Words'], df_meta_valid['Meta_score'], alpha=0.5, color='orange')
         z2 = np.polyfit(df_meta_valid['Length_Words'], df_meta_valid['Meta_score'], 1)
@@ -270,10 +270,129 @@ def overview_text_preprocessing(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def keyword_extraction_tfidf(df: pd.DataFrame) -> None:
+    """
+    Extracts top keywords using TF-IDF and compares high vs low rated movies.
+    Accepts preprocessed DataFrame from load_and_preprocess().
+    """
+    df = df.dropna(subset=['Overview']).copy()
+    
+    print("\n\nTF-IDF KEYWORD EXTRACTION")
+    print("=" * 60)
+    
+    # EXTRACT TOP KEYWORDS FROM MOVIE OVERVIEWS
+    # ========================================================================
+    print("\n1. TOP KEYWORDS FROM ALL MOVIES")
+    print("-" * 60)
+    
+    tfidf = TfidfVectorizer(max_features=50, stop_words='english')
+    tfidf_matrix = tfidf.fit_transform(df['Overview'])
+    
+    feature_names = tfidf.get_feature_names_out()
+    avg_scores = np.mean(tfidf_matrix.toarray(), axis=0)
+    
+    keywords = pd.DataFrame({
+        'keyword': feature_names,
+        'score': avg_scores
+    }).sort_values('score', ascending=False)
+    
+    print("\nTop 15 Keywords:")
+    for idx, row in keywords.head(15).iterrows():
+        print(f"  {row['keyword']}: {row['score']:.4f}")
+    
+    # COMPARE HIGH-RATED VS LOW-RATED MOVIES
+    # ========================================================================
+    print("\n\n2. COMPARING HIGH-RATED VS LOW-RATED MOVIES")
+    print("-" * 60)
+    
+    high_rated = df[df['IMDB_Rating'] > 8.0]
+    low_rated = df[df['IMDB_Rating'] < 8.0]
+    
+    print(f"\nHigh-rated (>8.0): {len(high_rated)} movies")
+    print(f"Low-rated (<8.0): {len(low_rated)} movies")
+    
+    # High-rated keywords
+    print("\nTop 10 Keywords - High-Rated Movies:")
+    try:
+        tfidf_high = TfidfVectorizer(
+            max_features=50,
+            stop_words='english',
+            min_df=1,
+            max_df=0.8,
+            ngram_range=(1, 1)
+        )
+        matrix_high = tfidf_high.fit_transform(high_rated['Overview'])
+        
+        high_keywords = pd.DataFrame({
+            'keyword': tfidf_high.get_feature_names_out(),
+            'score': np.mean(matrix_high.toarray(), axis=0)
+        }).sort_values('score', ascending=False)
+        
+        for idx, row in high_keywords.head(10).iterrows():
+            print(f"  {row['keyword']}: {row['score']:.4f}")
+    except ValueError as e:
+        print(f"  Error: {e}")
+        print("  Unable to extract keywords from high-rated movies.")
+        high_keywords = None
+    
+    # Low-rated keywords
+    print("\nTop 10 Keywords - Low-Rated Movies:")
+    try:
+        tfidf_low = TfidfVectorizer(
+            max_features=50,
+            stop_words='english',
+            min_df=1,
+            max_df=1.0,
+            ngram_range=(1, 1)
+        )
+        matrix_low = tfidf_low.fit_transform(low_rated['Overview'])
+        
+        low_keywords = pd.DataFrame({
+            'keyword': tfidf_low.get_feature_names_out(),
+            'score': np.mean(matrix_low.toarray(), axis=0)
+        }).sort_values('score', ascending=False)
+        
+        for idx, row in low_keywords.head(10).iterrows():
+            print(f"  {row['keyword']}: {row['score']:.4f}")
+    except ValueError as e:
+        print(f"  Error: {e}")
+        print("  The dataset has too few low-rated movies (<8.0) with meaningful text.")
+        low_keywords = None
+    
+    # Visualization
+    if high_keywords is not None and low_keywords is not None:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+        
+        top_high = high_keywords.head(10)
+        ax1.barh(top_high['keyword'], top_high['score'], color='green', alpha=0.7)
+        ax1.set_xlabel('TF-IDF Score')
+        ax1.set_title('High-Rated Movies (>8.0)')
+        ax1.invert_yaxis()
+        ax1.grid(True, alpha=0.3, axis='x')
+        
+        top_low = low_keywords.head(10)
+        ax2.barh(top_low['keyword'], top_low['score'], color='red', alpha=0.7)
+        ax2.set_xlabel('TF-IDF Score')
+        ax2.set_title('Low-Rated Movies (<8.0)')
+        ax2.invert_yaxis()
+        ax2.grid(True, alpha=0.3, axis='x')
+        
+        plt.tight_layout()
+        plt.savefig('tfidf_keywords.png', dpi=300, bbox_inches='tight')
+        print("\nVisualization saved as 'tfidf_keywords.png'")
+        plt.show()
+    else:
+        print("\nSkipping visualization due to insufficient low-rated movie data.")
+    
+    print("\nAnalysis Complete!")
+
+# Run the function
+
 if __name__ == '__main__':
     csv_path = 'imdb_top_1000.csv'
     df = exploratory_data_analysis(csv_path, plot=True)
     genre_analysis(csv_path)
     df_processed = overview_text_preprocessing(df)
+    keyword_extraction_tfidf(df_processed)
 
     
