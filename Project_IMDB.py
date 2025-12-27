@@ -506,14 +506,12 @@ def sentiment_analysis_vader(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def sentiment_analysis_bert(csv_file):
+def sentiment_analysis_bert(df: pd.DataFrame) -> pd.DataFrame:
     """
     Measures sentiment polarity using BERT and explores correlation with ratings and gross.
+    Accepts preprocessed DataFrame from load_and_preprocess().
     """
-    
-    # Load dataset
-    df = pd.read_csv(csv_file)
-    df = df.dropna(subset=['Overview'])
+    df = df.dropna(subset=['Overview']).copy()
     
     print("\n\nSENTIMENT ANALYSIS - BERT")
     print("=" * 60)
@@ -564,7 +562,6 @@ def sentiment_analysis_bert(csv_file):
     print(f"\nSentiment Distribution:")
     print(df['Sentiment_Label'].value_counts())
     
-    # ========================================================================
     # CORRELATION WITH IMDB RATING AND GROSS
     # ========================================================================
     print("\n\n2. CORRELATION ANALYSIS")
@@ -581,10 +578,10 @@ def sentiment_analysis_bert(csv_file):
     print(f"  Sentiment vs IMDB Rating: {corr_imdb:.4f}")
     print(f"  Sentiment vs Box Office Gross: {corr_gross:.4f}")
     
-    # ========================================================================
+
     # VISUALIZATIONS
     # ========================================================================
-    print("\n\n3. CREATING VISUALIZATIONS")
+    print("\n\nCREATING VISUALIZATIONS")
     print("-" * 60)
     
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
@@ -637,7 +634,7 @@ if __name__ == '__main__':
     df_processed = overview_text_preprocessing(df)
     keyword_extraction_tfidf(df_processed)
     df_with_sentiment = sentiment_analysis_vader(df_processed)
-    df_with_sentiment = sentiment_analysis_bert('imdb_top_1000.csv')
+    df_with_bert = sentiment_analysis_bert(df_with_sentiment)
 
 
 
