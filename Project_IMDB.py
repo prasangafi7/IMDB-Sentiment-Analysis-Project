@@ -10,6 +10,13 @@ from scipy import stats
 from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.sentiment import SentimentIntensityAnalyzer
 from transformers import pipeline
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -623,7 +630,238 @@ def sentiment_analysis_bert(df: pd.DataFrame) -> pd.DataFrame:
     
     print("\nAnalysis Complete!")
     return df
+
+
+
+def predict_imdb_rating(csv_file):
+    """
+    Predicts IMDB ratings using text features, genre, runtime, certificate, and votes.
+    Compares Linear Regression, Random Forest, XGBoost, and Deep Learning.
+    """
     
+    # Load dataset
+    df = pd.read_csv(csv_file)
+    
+    print("IMDB RATING PREDICTION")
+    print("=" * 70)
+    
+    # FEATURE ENGINEERING
+    # ========================================================================
+    print("\n1. FEATURE ENGINEERING")
+    print("-" * 70)
+    
+    # Drop rows with missing target or important features
+    df = df.dropna(subset=['IMDB_Rating', 'Overview', 'Runtime', 'No_of_Votes'])
+    
+    print(f"Dataset size: {len(df)} movies")
+    
+    # Clean Runtime
+    df['Runtime_Minutes'] = df['Runtime'].str.replace(' min', '').astype(float)
+    
+    # Encode Certificate (G, PG, R, etc.)
+    le_cert = LabelEncoder()
+    df['Certificate_Encoded'] = le_cert.fit_transform(df['Certificate'].fillna('Unknown'))
+    
+    # Extract overview embeddings using TF-IDF
+    print("\nExtracting text features from overviews...")
+    tfidf = TfidfVectorizer(max_features=100, stop_words='english')
+    overview_features = tfidf.fit_transform(df['Overview']).toarray()
+    
+    # Create genre features (one-hot encoding for top genres)
+    print("Processing genre features...")
+    all_genres = []
+    for genres in df['Genre'].dropna():
+        all_genres.extend([g.strip() for g in genres.split(',')])
+    
+    from collections import Counter
+    top_genres = [g[0] for g in Counter(all_genres).most_common(10)]
+    
+    for genre in top_genres:
+        df[f'Genre_{genre}'] = df['Genre'].apply(
+            lambda x: 1 if genre in str(x) else 0
+        )
+    
+    # Combine all features
+    print("Combining all features...")
+    
+    # Numerical features
+    numerical_features = df[['Runtime_Minutes', 'Certificate_Encoded', 'No_of_Votes']].values
+    
+    # Genre features
+    genre_features = df[[f'Genre_{g}' for g in top_genres]].values
+    
+    # Combine: Overview embeddings + Numerical + Genre
+    X = np.hstack([overview_features, numerical_features, genre_features])
+    y = df['IMDB_Rating'].values
+    
+    print(f"\nFeature matrix shape: {X.shape}")
+    print(f"Features: {X.shape[1]} total")
+    print(f"  - Overview embeddings: 100")
+    print(f"  - Runtime: 1")
+    print(f"  - Certificate: 1")
+    print(f"  - Votes: 1")
+    print(f"  - Genre features: {len(top_genres)}")
+    
+    # TRAIN-TEST SPLIT
+    # ========================================================================
+    print("\n\n2. SPLITTING DATA")
+    print("-" * 70)
+    
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+    
+    print(f"Training set: {len(X_train)} movies")
+    print(f"Test set: {len(X_test)} movies")
+    
+    # TRAIN MODELS
+    # ========================================================================
+    print("\n\n3. TRAINING MODELS")
+    print("-" * 70)
+    
+    results = {}
+    
+    # Model 1: Linear Regression
+    print("\nTraining Linear Regression...")
+    lr = LinearRegression()
+    lr.fit(X_train, y_train)
+    y_pred_lr = lr.predict(X_test)
+    
+    mae_lr = mean_absolute_error(y_test, y_pred_lr)
+    rmse_lr = np.sqrt(mean_squared_error(y_test, y_pred_lr))
+    results['Linear Regression'] = {'MAE': mae_lr, 'RMSE': rmse_lr}
+    
+    print(f"  MAE: {mae_lr:.4f}")
+    print(f"  RMSE: {rmse_lr:.4f}")
+    
+    # Model 2: Random Forest
+    print("\nTraining Random Forest...")
+    rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    rf.fit(X_train, y_train)
+    y_pred_rf = rf.predict(X_test)
+    
+    mae_rf = mean_absolute_error(y_test, y_pred_rf)
+    rmse_rf = np.sqrt(mean_squared_error(y_test, y_pred_rf))
+    results['Random Forest'] = {'MAE': mae_rf, 'RMSE': rmse_rf}
+    
+    print(f"  MAE: {mae_rf:.4f}")
+    print(f"  RMSE: {rmse_rf:.4f}")
+    
+    # Model 3: XGBoost
+    print("\nTraining XGBoost...")
+    xgb = XGBRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    xgb.fit(X_train, y_train)
+    y_pred_xgb = xgb.predict(X_test)
+    
+    mae_xgb = mean_absolute_error(y_test, y_pred_xgb)
+    rmse_xgb = np.sqrt(mean_squared_error(y_test, y_pred_xgb))
+    results['XGBoost'] = {'MAE': mae_xgb, 'RMSE': rmse_xgb}
+    
+    print(f"  MAE: {mae_xgb:.4f}")
+    print(f"  RMSE: {rmse_xgb:.4f}")
+    
+    # Model 4: Deep Learning (Neural Network)
+    print("\nTraining Deep Learning (Neural Network)...")
+    nn = MLPRegressor(hidden_layer_sizes=(128, 64, 32), 
+                      max_iter=500, 
+                      random_state=42,
+                      early_stopping=True)
+    nn.fit(X_train, y_train)
+    y_pred_nn = nn.predict(X_test)
+    
+    mae_nn = mean_absolute_error(y_test, y_pred_nn)
+    rmse_nn = np.sqrt(mean_squared_error(y_test, y_pred_nn))
+    results['Deep Learning'] = {'MAE': mae_nn, 'RMSE': rmse_nn}
+    
+    print(f"  MAE: {mae_nn:.4f}")
+    print(f"  RMSE: {rmse_nn:.4f}")
+    
+    # COMPARISON
+    # ========================================================================
+    print("\n\n4. MODEL COMPARISON")
+    print("-" * 70)
+    
+    print(f"\n{'Model':<20} {'MAE':<12} {'RMSE':<12}")
+    print("-" * 50)
+    for model, metrics in results.items():
+        print(f"{model:<20} {metrics['MAE']:<12.4f} {metrics['RMSE']:<12.4f}")
+    
+    # Find best model
+    best_model = min(results.items(), key=lambda x: x[1]['MAE'])
+    print(f"\nBest Model: {best_model[0]} (Lowest MAE: {best_model[1]['MAE']:.4f})")
+    
+    #  VISUALIZATIONS
+    # ========================================================================
+    print("\n\n5. CREATING VISUALIZATIONS")
+    print("-" * 70)
+    
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    fig.suptitle('IMDB Rating Prediction - Model Comparison', fontsize=16, fontweight='bold')
+    
+    # Plot 1: MAE Comparison
+    models = list(results.keys())
+    maes = [results[m]['MAE'] for m in models]
+    
+    axes[0, 0].bar(models, maes, color=['blue', 'green', 'orange', 'red'], alpha=0.7)
+    axes[0, 0].set_ylabel('Mean Absolute Error (MAE)')
+    axes[0, 0].set_title('MAE Comparison')
+    axes[0, 0].tick_params(axis='x', rotation=45)
+    axes[0, 0].grid(True, alpha=0.3, axis='y')
+    
+    # Plot 2: RMSE Comparison
+    rmses = [results[m]['RMSE'] for m in models]
+    
+    axes[0, 1].bar(models, rmses, color=['blue', 'green', 'orange', 'red'], alpha=0.7)
+    axes[0, 1].set_ylabel('Root Mean Squared Error (RMSE)')
+    axes[0, 1].set_title('RMSE Comparison')
+    axes[0, 1].tick_params(axis='x', rotation=45)
+    axes[0, 1].grid(True, alpha=0.3, axis='y')
+    
+    # Plot 3: Linear Regression Predictions
+    axes[0, 2].scatter(y_test, y_pred_lr, alpha=0.5)
+    axes[0, 2].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+    axes[0, 2].set_xlabel('Actual Rating')
+    axes[0, 2].set_ylabel('Predicted Rating')
+    axes[0, 2].set_title(f'Linear Regression (MAE: {mae_lr:.3f})')
+    axes[0, 2].grid(True, alpha=0.3)
+    
+    # Plot 4: Random Forest Predictions
+    axes[1, 0].scatter(y_test, y_pred_rf, alpha=0.5, color='green')
+    axes[1, 0].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+    axes[1, 0].set_xlabel('Actual Rating')
+    axes[1, 0].set_ylabel('Predicted Rating')
+    axes[1, 0].set_title(f'Random Forest (MAE: {mae_rf:.3f})')
+    axes[1, 0].grid(True, alpha=0.3)
+    
+    # Plot 5: XGBoost Predictions
+    axes[1, 1].scatter(y_test, y_pred_xgb, alpha=0.5, color='orange')
+    axes[1, 1].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+    axes[1, 1].set_xlabel('Actual Rating')
+    axes[1, 1].set_ylabel('Predicted Rating')
+    axes[1, 1].set_title(f'XGBoost (MAE: {mae_xgb:.3f})')
+    axes[1, 1].grid(True, alpha=0.3)
+    
+    # Plot 6: Deep Learning Predictions
+    axes[1, 2].scatter(y_test, y_pred_nn, alpha=0.5, color='red')
+    axes[1, 2].plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+    axes[1, 2].set_xlabel('Actual Rating')
+    axes[1, 2].set_ylabel('Predicted Rating')
+    axes[1, 2].set_title(f'Deep Learning (MAE: {mae_nn:.3f})')
+    axes[1, 2].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig('rating_prediction_comparison.png', dpi=300, bbox_inches='tight')
+    print("\nVisualization saved as 'rating_prediction_comparison.png'")
+    plt.show()
+    
+    print("\n" + "=" * 70)
+    print("PREDICTION MODELING COMPLETE!")
+    print("=" * 70)
+    
+    return results
+
+
+# Run the function    
 
 if __name__ == '__main__':
     csv_path = 'imdb_top_1000.csv'
@@ -635,6 +873,7 @@ if __name__ == '__main__':
     keyword_extraction_tfidf(df_processed)
     df_with_sentiment = sentiment_analysis_vader(df_processed)
     df_with_bert = sentiment_analysis_bert(df_with_sentiment)
+    results = predict_imdb_rating('imdb_top_1000.csv')
 
 
 
