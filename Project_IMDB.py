@@ -633,14 +633,20 @@ def sentiment_analysis_bert(df: pd.DataFrame) -> pd.DataFrame:
 
 
 
-def predict_imdb_rating(csv_file):
+def predict_imdb_rating(df_or_path):
     """
     Predicts IMDB ratings using text features, genre, runtime, certificate, and votes.
     Compares Linear Regression, Random Forest, XGBoost, and Deep Learning.
+    
+    Args:
+        df_or_path: Either a preprocessed DataFrame or path to CSV file
     """
     
-    # Load dataset
-    df = pd.read_csv(csv_file)
+    # Load dataset if path provided, otherwise use DataFrame
+    if isinstance(df_or_path, str):
+        df = load_and_preprocess(df_or_path)
+    else:
+        df = df_or_path.copy()
     
     print("IMDB RATING PREDICTION")
     print("=" * 70)
@@ -651,12 +657,12 @@ def predict_imdb_rating(csv_file):
     print("-" * 70)
     
     # Drop rows with missing target or important features
-    df = df.dropna(subset=['IMDB_Rating', 'Overview', 'Runtime', 'No_of_Votes'])
+    df = df.dropna(subset=['IMDB_Rating', 'Overview', 'Runtime_Minutes', 'No_of_Votes'])
     
     print(f"Dataset size: {len(df)} movies")
     
-    # Clean Runtime
-    df['Runtime_Minutes'] = df['Runtime'].str.replace(' min', '').astype(float)
+    # Runtime_Minutes already created by load_and_preprocess()
+    # No need to recreate it
     
     # Encode Certificate (G, PG, R, etc.)
     le_cert = LabelEncoder()
@@ -854,10 +860,6 @@ def predict_imdb_rating(csv_file):
     print("\nVisualization saved as 'rating_prediction_comparison.png'")
     plt.show()
     
-    print("\n" + "=" * 70)
-    print("PREDICTION MODELING COMPLETE!")
-    print("=" * 70)
-    
     return results
 
 
@@ -866,14 +868,27 @@ def predict_imdb_rating(csv_file):
 if __name__ == '__main__':
     csv_path = 'imdb_top_1000.csv'
     
-    # Run all analyses in sequence
+    # Run all analyses in sequence (using preprocessed data)
+    print("Starting IMDB Analysis Pipeline...\n")
+    
+    # 1. EDA and Genre Analysis
     df = exploratory_data_analysis(csv_path, plot=True)
     genre_analysis(csv_path)
+    
+    # 2. Text Analysis
     df_processed = overview_text_preprocessing(df)
     keyword_extraction_tfidf(df_processed)
+    
+    # 3. Sentiment Analysis (VADER is faster, BERT slow - take time)
     df_with_sentiment = sentiment_analysis_vader(df_processed)
-    df_with_bert = sentiment_analysis_bert(df_with_sentiment)
-    results = predict_imdb_rating('imdb_top_1000.csv')
+    df_with_bert = sentiment_analysis_bert(df_with_sentiment)  # Deep analysis with BERT
+    
+    # 4. Rating Prediction (reuse preprocessed data)
+    results = predict_imdb_rating(df_processed)  # Pass DataFrame instead of reloading CSV
+    
+    print("\n" + "=" * 70)
+    print("ALL ANALYSES COMPLETED SUCCESSFULLY!")
+    print("=" * 70)
 
 
 
