@@ -886,6 +886,31 @@ def classify_movie_success(csv_file):
     print(f"\nDistribution:")
     print(f"  Hit (1): {(df['Success'] == 1).sum()} movies")
     print(f"  Flop (0): {(df['Success'] == 0).sum()} movies")
+
+    # 2. FEATURE ENGINEERING
+    # ========================================================================
+    print("\n\n2. PREPARING FEATURES")
+    print("-" * 60)
+    
+    # Text features
+    tfidf = TfidfVectorizer(max_features=50, stop_words='english')
+    text_features = tfidf.fit_transform(df['Overview']).toarray()
+    
+    # Numerical features
+    df['Runtime_Minutes'] = df['Runtime'].str.replace(' min', '').astype(float)
+    df['Certificate_Encoded'] = LabelEncoder().fit_transform(df['Certificate'].fillna('Unknown'))
+    
+    X = np.hstack([text_features, 
+                   df[['Runtime_Minutes', 'Certificate_Encoded', 'No_of_Votes']].values])
+    y = df['Success'].values
+    
+    print(f"Total features: {X.shape[1]}")
+    
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+    
+
     
 
 
