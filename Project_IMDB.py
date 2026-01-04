@@ -862,6 +862,33 @@ def predict_imdb_rating(df_or_path):
     
     return results
 
+def classify_movie_success(csv_file):
+    """
+    Classifies movies as Hit or Flop based on IMDB rating >= 7.5
+    """
+    
+    df = pd.read_csv(csv_file)
+    
+    print("MOVIE SUCCESS CLASSIFICATION")
+    print("=" * 60)
+
+    # 1. DEFINE SUCCESS LABEL (IMDB >= 7.5 = HIT)
+    # ========================================================================
+    print("\n1. SUCCESS LABEL DEFINITION")
+    print("-" * 60)
+    
+    df = df.dropna(subset=['IMDB_Rating', 'Overview', 'Runtime', 'No_of_Votes'])
+    
+    df['Success'] = (df['IMDB_Rating'] >= 7.5).astype(int)
+    
+    print("Success = IMDB Rating >= 7.5 (Hit)")
+    print("Failure = IMDB Rating < 7.5 (Flop)")
+    print(f"\nDistribution:")
+    print(f"  Hit (1): {(df['Success'] == 1).sum()} movies")
+    print(f"  Flop (0): {(df['Success'] == 0).sum()} movies")
+    
+
+
 
 # Run the function    
 
@@ -872,19 +899,22 @@ if __name__ == '__main__':
     print("Starting IMDB Analysis Pipeline...\n")
     
     # 1. EDA and Genre Analysis
-    df = exploratory_data_analysis(csv_path, plot=True)
-    genre_analysis(csv_path)
+   # df = exploratory_data_analysis(csv_path, plot=True)
+   # genre_analysis(csv_path)
     
     # 2. Text Analysis
-    df_processed = overview_text_preprocessing(df)
-    keyword_extraction_tfidf(df_processed)
+   # df_processed = overview_text_preprocessing(df)
+   # keyword_extraction_tfidf(df_processed)
     
     # 3. Sentiment Analysis (VADER is faster, BERT slow - take time)
-    df_with_sentiment = sentiment_analysis_vader(df_processed)
-    df_with_bert = sentiment_analysis_bert(df_with_sentiment)  # Deep analysis with BERT
+   # df_with_sentiment = sentiment_analysis_vader(df_processed)
+   # df_with_bert = sentiment_analysis_bert(df_with_sentiment)  # Deep analysis with BERT
     
     # 4. Rating Prediction (reuse preprocessed data)
-    results = predict_imdb_rating(df_processed)  # Pass DataFrame instead of reloading CSV
+   # results = predict_imdb_rating(df_processed)  # Pass DataFrame instead of reloading CSV
+
+    # 5. Movie Success Classification
+    classify_movie_success('imdb_top_1000.csv')
     
     print("\n" + "=" * 70)
     print("ALL ANALYSES COMPLETED SUCCESSFULLY!")
