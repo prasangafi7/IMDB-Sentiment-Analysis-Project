@@ -18,7 +18,7 @@ from xgboost import XGBRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -936,8 +936,10 @@ def classify_movie_success(csv_file):
     for metric, value in results['Logistic Regression'].items():
         print(f"  {metric}: {value:.4f}")
     
+    print("\nClassification Report:")
+    print(classification_report(y_test, y_pred, target_names=['Flop', 'Hit']))
     
-
+    print("\nAnalysis Complete!")
 
 
 
