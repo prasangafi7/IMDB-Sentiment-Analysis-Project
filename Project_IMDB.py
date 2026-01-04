@@ -936,10 +936,6 @@ def classify_movie_success(csv_file):
     for metric, value in results['Logistic Regression'].items():
         print(f"  {metric}: {value:.4f}")
     
-    print("\nClassification Report:")
-    print(classification_report(y_test, y_pred, target_names=['Flop', 'Hit']))
-    
-    print("\nAnalysis Complete!")
 
 
 
