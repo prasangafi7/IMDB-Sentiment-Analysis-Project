@@ -17,6 +17,8 @@ from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -872,17 +874,17 @@ def classify_movie_success(csv_file):
     print("MOVIE SUCCESS CLASSIFICATION")
     print("=" * 60)
 
-    # 1. DEFINE SUCCESS LABEL (IMDB >= 7.5 = HIT)
+    # 1. DEFINE SUCCESS LABEL (IMDB >= 8.0 = HIT)
     # ========================================================================
     print("\n1. SUCCESS LABEL DEFINITION")
     print("-" * 60)
     
     df = df.dropna(subset=['IMDB_Rating', 'Overview', 'Runtime', 'No_of_Votes'])
     
-    df['Success'] = (df['IMDB_Rating'] >= 7.5).astype(int)
+    df['Success'] = (df['IMDB_Rating'] >= 8.0).astype(int)
     
-    print("Success = IMDB Rating >= 7.5 (Hit)")
-    print("Failure = IMDB Rating < 7.5 (Flop)")
+    print("Success = IMDB Rating >= 8.0 (Hit)")
+    print("Failure = IMDB Rating < 8.0 (Flop)")
     print(f"\nDistribution:")
     print(f"  Hit (1): {(df['Success'] == 1).sum()} movies")
     print(f"  Flop (0): {(df['Success'] == 0).sum()} movies")
@@ -911,7 +913,31 @@ def classify_movie_success(csv_file):
     )
     
 
+        # 3. TRAIN CLASSIFIERS
+    # ========================================================================
+    print("\n\n3. TRAINING CLASSIFIERS")
+    print("-" * 60)
     
+    results = {}
+    
+    # Logistic Regression
+    print("\nLogistic Regression:")
+    lr = LogisticRegression(max_iter=1000, random_state=42)
+    lr.fit(X_train, y_train)
+    y_pred = lr.predict(X_test)
+    
+    results['Logistic Regression'] = {
+        'Accuracy': accuracy_score(y_test, y_pred),
+        'Precision': precision_score(y_test, y_pred),
+        'Recall': recall_score(y_test, y_pred),
+        'F1': f1_score(y_test, y_pred)
+    }
+    
+    for metric, value in results['Logistic Regression'].items():
+        print(f"  {metric}: {value:.4f}")
+    
+    
+
 
 
 
